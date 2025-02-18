@@ -31,7 +31,7 @@ def train_model(fmri_data, words_vector):
     
     y_pred = model.predict(X_test)
     mse = mean_squared_error(y_test, y_pred)
-    print(f"🔍 Error cuadrático medio (MSE): {mse:.4f}")
+    print(f"Error cuadrático medio (MSE): {mse:.4f}")
 
     return model
 
