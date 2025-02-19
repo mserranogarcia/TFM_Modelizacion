@@ -3,53 +3,74 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from nilearn import image, datasets, plotting
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import Ridge
 from sklearn.metrics import mean_squared_error
 
-# Cargar los datos fMRI y palabras
-def load_data(fmri_path, words_path):
-    """Carga los datos de fMRI y la lista de palabras."""
-    fmri_data = np.load(fmri_path)  # Asegúrate de que el archivo es .npy o ajusta la lectura
-    words_df = pd.read_csv(words_path)
-    return fmri_data, words_df
+# Importar funciones de preprocesamiento
+from scripts.preprocess_eeg import load_eeg, preprocess_eeg
+from scripts.preprocess_fnirs import load_fnirs, preprocess_fnirs
+from scripts.preprocess_words import load_word_data
 
-# Preprocesamiento de datos
-def preprocess_data(fmri_data, words_df):
-    """Normaliza los datos y los ajusta para el modelo."""
-    fmri_data = (fmri_data - np.mean(fmri_data, axis=0)) / np.std(fmri_data, axis=0)
-    words_vector = words_df.iloc[:, 1:].values  # Suponiendo que la primera columna es la palabra
-    return fmri_data, words_vector
+# Cargar los Datos de Palabras, EEG y fNIRS
+def load_all_data():
+    """Carga los datos de palabras, EEG y fNIRS."""
+    words_file = "data/raw/word_lists.csv"
+    corpus_file = "data/processed/corpus_normativo.csv"
+    eeg_file = "data/raw/eeg_data.csv"
+    fnirs_file = "data/raw/fnirs_data.csv"
 
-# Entrenar modelo de predicción (ejemplo: Ridge Regression)
-def train_model(fmri_data, words_vector):
-    """Entrena un modelo simple para predecir fMRI a partir de palabras."""
-    X_train, X_test, y_train, y_test = train_test_split(words_vector, fmri_data, test_size=0.2, random_state=42)
+    words_data = load_word_data(words_file, corpus_file)
+    eeg_data = load_eeg(eeg_file)
+    fnirs_data = load_fnirs(fnirs_file)
+
+    return words_data, eeg_data, fnirs_data
+
+# Preprocesar los Datos
+def preprocess_all(words_data, eeg_data, fnirs_data):
+    """Aplica preprocesamiento a palabras, EEG y fNIRS."""
+    eeg_cleaned = preprocess_eeg(eeg_data)
+    fnirs_cleaned = preprocess_fnirs(fnirs_data)
+
+    return words_data, eeg_cleaned, fnirs_cleaned
+
+# Entrenar Modelo de Predicción
+def train_model(X, y):
+    """Entrena un modelo de regresión Ridge para predecir memoria."""
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
     model = Ridge(alpha=1.0)
     model.fit(X_train, y_train)
-    
+
     y_pred = model.predict(X_test)
     mse = mean_squared_error(y_test, y_pred)
-    print(f"Error cuadrático medio (MSE): {mse:.4f}")
+    print(f"📊 Error cuadrático medio (MSE): {mse:.4f}")
 
-    return model
+    return model, X_test, y_test
 
-# Visualizar resultados
+# Visualizar Resultados
 def plot_results(model, X_test, y_test):
-    """Visualiza la correlación entre valores reales y predichos."""
+    """Visualiza la relación entre valores reales y predichos."""
     y_pred = model.predict(X_test)
+
     plt.figure(figsize=(8,6))
-    plt.scatter(y_test[:, 0], y_pred[:, 0], alpha=0.5)
-    plt.xlabel("fMRI Real")
-    plt.ylabel("fMRI Predicho")
+    plt.scatter(y_test, y_pred, alpha=0.5)
+    plt.xlabel("Valores Reales")
+    plt.ylabel("Valores Predichos")
     plt.title("Resultados del Modelo")
     plt.show()
 
-# Script Principal
+# Ejecutar el Pipeline Completo
 if __name__ == "__main__":
-    fmri_data, words_df = load_data("data/fmri_data.npy", "data/words_data.csv")
-    fmri_data, words_vector = preprocess_data(fmri_data, words_df)
-    
-    model = train_model(fmri_data, words_vector)
-    plot_results(model, words_vector, fmri_data)
+    print("Cargando datos...")
+    words_data, eeg_data, fnirs_data = load_all_data()
+
+    print("Preprocesando datos...")
+    words_data, eeg_cleaned, fnirs_cleaned = preprocess_all(words_data, eeg_data, fnirs_data)
+
+    print("Entrenando modelo...")
+    model, X_test, y_test = train_model(words_data[["frecuencia", "imagenabilidad", "longitud"]], eeg_cleaned["theta_power"])
+
+    print("Visualizando resultados...")
+    plot_results(model, X_test, y_test)
+
+    print("Proceso completado")
